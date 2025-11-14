@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.RadioButton?>
+<?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.text.Font?>
+
+<BorderPane xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" 
+            fx:controller="main.ui.QuizController"
+            prefHeight="600" prefWidth="800">
+    
+    <top>
+        <HBox alignment="CENTER_LEFT" spacing="20" style="-fx-background-color: #ddd; -fx-padding: 10;">
+            <Label fx:id="quizTitleLabel" text="Tên bài thi" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+            <Label fx:id="timerLabel" text="Thời gian: 00:00" style="-fx-text-fill: red; -fx-font-weight: bold;"/>
+        </HBox>
+    </top>
+
+    <center>
+        <VBox spacing="20" style="-fx-padding: 30;">
+            <Label fx:id="questionTextLabel" text="Nội dung câu hỏi sẽ hiện ở đây..." wrapText="true">
+                <font><Font size="16.0"/></font>
+            </Label>
+            
+            <VBox spacing="10">
+                <RadioButton fx:id="optionA" text="A. Lựa chọn 1"/>
+                <RadioButton fx:id="optionB" text="B. Lựa chọn 2"/>
+                <RadioButton fx:id="optionC" text="C. Lựa chọn 3"/>
+                <RadioButton fx:id="optionD" text="D. Lựa chọn 4"/>
+            </VBox>
+        </VBox>
+    </center>
+    
+    <bottom>
+        <HBox alignment="CENTER_RIGHT" spacing="20" style="-fx-padding: 10;">
+            <Label fx:id="progressLabel" text="Câu 1 / 10"/>
+            <Button fx:id="nextButton" text="Câu tiếp theo" onAction="#handleNextButton"/>
+            <Button fx:id="submitButton" text="Nộp bài" style="-fx-background-color: #28a745; -fx-text-fill: white;" visible="false" onAction="#handleSubmitButton"/>
+        </HBox>
+    </bottom>
+
+</BorderPane>

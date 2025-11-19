@@ -21,11 +21,22 @@ public class ScreenLocker {
      * Hàm này PHẢI được gọi từ luồng JavaFX (Platform.runLater)
      */
     public static void show() {
+    	
+    	isRunning = false;
+        if (watcherThread != null && watcherThread.isAlive()) {
+            watcherThread.interrupt();
+        }
+
+        // Đóng ngay lập tức các cửa sổ cũ (nếu có)
+        // Không dùng Platform.runLater ở đây để đảm bảo nó xong TRƯỚC khi tạo mới
         if (!lockStages.isEmpty()) {
-            return;
+            for (Stage stage : lockStages) {
+                stage.close();
+            }
+            lockStages.clear();
         }
         
-        System.out.println("[SCREEN LOCKER] Đang hiển thị màn hình khóa...");
+        System.out.println("[SCREEN LOCKER] Đang Khóa tất cả màn hình...");
         
         List<Screen> screens = Screen.getScreens();
 
@@ -65,7 +76,7 @@ public class ScreenLocker {
                         }
                     });
                     
-                    Thread.sleep(10000); 	
+                    Thread.sleep(100); 	
                 } catch (InterruptedException e) {
                     break; 
                 }

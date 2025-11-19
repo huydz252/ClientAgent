@@ -5,6 +5,7 @@ import javafx.application.Platform;
 import javafx.stage.Stage;
 import main.model.JsonMessage;
 import main.model.Quiz;
+import main.ui.QuizView;
 import main.ui.ScreenLocker;
 import main.util.SystemMonitor;
 
@@ -13,6 +14,8 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.lang.reflect.Type;
 import java.net.Socket;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
@@ -36,6 +39,7 @@ public class ClientMain extends Application {
 
     @Override
     public void start(Stage primaryStage) {
+    	Platform.setImplicitExit(false); 	//giữ cho JavaFX luôn sống, kể cả khi đóng hết của sổ giao diện
         primaryStage.hide();
         new Thread(this::startSocketConnection).start();
     }
@@ -88,6 +92,7 @@ public class ClientMain extends Application {
                     Thread.sleep(5000); 
 
                     List<String> runningProcesses = SystemMonitor.getRunningProcesses();
+                    String timeStamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
                     
                     for (String forbidden : FORBIDDEN_PROCESSES) {
                         if (runningProcesses.contains(forbidden)) {
@@ -95,7 +100,8 @@ public class ClientMain extends Application {
                             System.out.println("[MONITOR] Phát hiện vi phạm: " + forbidden);
                             Map<String, Object> payload = Map.of(
                                 "processName", forbidden,
-                                "machineName", System.getenv("COMPUTERNAME") 
+                                "machineName", System.getenv("COMPUTERNAME"),
+                                "time", timeStamp
                             );
                             JsonMessage alertMsg = new JsonMessage("ALERT_PROCESS_VIOLATION", payload);
                             
@@ -103,12 +109,6 @@ public class ClientMain extends Application {
                             if (writer != null) {
                                 writer.println(gson.toJson(alertMsg));
                             }
-                            
-                            // Chỉ báo 1 lần cho mỗi tiến trình, 
-                            // Tạm thời break để quét tiếp 
-                            //note: cần kiểm tra xem cảnh báo hiện tại đã có ngay trước đó chưa
-                            //nếu chưa thì in, ko thì ko in.
-                            //nếu k có cảnh báo nào, thì xóa hết cảnh báo trong 5s
                             break; 
                         }
                     }
@@ -169,12 +169,40 @@ public class ClientMain extends Application {
                 
                 if(quiz != null) {
                 	System.out.println("Đã nhận được bài thi: " + quiz.getSubject());
+                	
+                	 Platform.runLater(() -> {
+                         QuizView.show(quiz);
+                     });
                 }
                 break;
+        }
+    }
+    
+    /**
+     * Hàm static để QuizController có thể gọi khi nộp bài.
+     * Hàm này chịu trách nhiệm đóng gói dữ liệu và gửi qua Socket.
+     */
+    public static void sendSubmit(int quizId, List<Integer> answers) {
+        if (writer != null) {
+            Map<String, Object> payload = Map.of(
+                "quizId", quizId,
+                "answers", answers
+            );
+            
+            JsonMessage msg = new JsonMessage("SUBMIT_QUIZ", payload);
+            
+            // 3. Gửi đi
+            String jsonMsg = gson.toJson(msg);
+            writer.println(jsonMsg);
+            
+            System.out.println("[CLIENT] Đã nộp bài cho bộ đề ID: " + quizId);
+        } else {
+            System.out.println("[CLIENT] Lỗi: Không tìm thấy kết nối đến Server (writer is null)");
         }
     }
 
     public static void main(String[] args) {
         launch(args);
     }
+
 }

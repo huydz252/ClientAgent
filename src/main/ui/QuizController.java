@@ -10,6 +10,7 @@ import main.ClientMain;
 import main.model.Quiz;
 import main.model.Question;
 import java.util.List;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 import javafx.scene.control.Alert;
@@ -98,7 +99,7 @@ public class QuizController {
                 if (timeSeconds <= 0) {
                     timeline.stop();
                     System.out.println("[TIMER] Hết giờ! Tự động nộp bài...");
-                    performSubmission(); // Gọi hàm nộp ngay lập tức
+                    performSubmission(LocalDateTime.now().toString()); // Gọi hàm nộp ngay lập tức
                 }
             })
         );
@@ -188,14 +189,14 @@ public class QuizController {
 
         Optional<ButtonType> result = alert.showAndWait();
         
- 
+        String submittedAt = LocalDateTime.now().toString();
         
         if (result.isPresent() && result.get() == ButtonType.OK) {
-            performSubmission();
+            performSubmission(submittedAt);
         }
     }
 
-    private void performSubmission() {
+    private void performSubmission(String submittedAt) {
         if (timeline != null) {
             timeline.stop();
         }
@@ -206,7 +207,7 @@ public class QuizController {
         saveCurrentAnswer(); 
         System.out.println("Nộp bài! Đáp án: " + userAnswers);
 
-        ClientMain.sendSubmit(currentQuiz.getId(), userAnswers);
+        ClientMain.sendSubmit(currentQuiz.getId(), userAnswers, submittedAt);
         
         main.ui.QuizView.close();
     }

@@ -2,17 +2,22 @@ package main;
 
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
 import javafx.stage.Stage;
+
 import main.model.JsonMessage;
 import main.model.Quiz;
 import main.ui.QuizView;
 import main.ui.ScreenLocker;
+import main.ui.StudentLoginController;
+import main.ui.WaitingController;
 import main.util.SystemMonitor;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.lang.reflect.Type;
 import java.net.Socket;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -30,6 +35,9 @@ public class ClientMain extends Application {
     private static Gson gson = new Gson();
     private static PrintWriter writer;
     
+    private static Stage loginStage;
+    private static StudentLoginController loginController;
+    
     private static final List<String> FORBIDDEN_PROCESSES = List.of(
             "chrome.exe",
             "msedge.exe",
@@ -40,8 +48,27 @@ public class ClientMain extends Application {
     @Override
     public void start(Stage primaryStage) {
     	Platform.setImplicitExit(false); 	//giữ cho JavaFX luôn sống, kể cả khi đóng hết của sổ giao diện
-        primaryStage.hide();
+    	loginStage = primaryStage;
+    	
+    	//kết nối server trc khi hiển thị màn hình login
         new Thread(this::startSocketConnection).start();
+        showLoginScreen();
+    }
+    
+    private void showLoginScreen() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/main/ui/StudentLoginView.fxml"));
+            Parent root = loader.load();
+            
+            loginController = loader.getController();
+
+            loginStage.setTitle("Đăng nhập thi");
+            loginStage.setScene(new Scene(root));
+            loginStage.show();
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void startSocketConnection() {
@@ -51,31 +78,40 @@ public class ClientMain extends Application {
             
             writer = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
-            String machineName = System.getenv("COMPUTERNAME");
-            if (machineName == null) machineName = "MAY_TEST_01";
             
-            Map<String, Object> payload = Map.of("machineName", machineName);
-            JsonMessage registerMsg = new JsonMessage("REGISTER_AGENT", payload);
-            writer.println(gson.toJson(registerMsg));
-            System.out.println("Đã gửi tin nhắn đăng ký: " + machineName);
-            
-            startProcessMonitor();
-
             String serverJson;
             while ((serverJson = reader.readLine()) != null) {
-                System.out.println("[Server gửi]: " + serverJson);
-                
+            	System.out.println(">> [DEBUG] RAW RECV: " + serverJson);
                 try {
                     JsonMessage msg = gson.fromJson(serverJson, JsonMessage.class);
+                    
+                    //xử lí tin nhắn đến -> ok -> đăng nhập
                     processMessage(msg); 
                 } catch (JsonSyntaxException e) {
                     System.out.println("Lỗi JSON: " + e.getMessage());
                 }
             }
+            
         } catch (Exception e) {
-            e.printStackTrace();
-            System.out.println("Không thể kết nối tới Server.");
+        	e.printStackTrace();
+            // Nếu không kết nối được, hiện lỗi lên màn hình Login (nếu đang mở)
+            Platform.runLater(() -> {
+                if (loginController != null) {
+                    loginController.setStatus("Không kết nối được Server!", true);
+                }
+            });
+        }
+    }
+    
+ // Hàm static để Controller gọi
+    public static void sendLoginRequest(String code, String name) {
+        if (writer != null) {
+            Map<String, Object> payload = Map.of(
+                "studentCode", code,
+                "fullName", name
+            );
+            JsonMessage msg = new JsonMessage("LOGIN_REQUEST", payload);
+            writer.println(gson.toJson(msg));
         }
     }
     
@@ -105,7 +141,6 @@ public class ClientMain extends Application {
                             );
                             JsonMessage alertMsg = new JsonMessage("ALERT_PROCESS_VIOLATION", payload);
                             
-                            //gui ve server
                             if (writer != null) {
                                 writer.println(gson.toJson(alertMsg));
                             }
@@ -126,8 +161,35 @@ public class ClientMain extends Application {
     private void processMessage(JsonMessage message) {
     	
         if (message == null || message.getType() == null) return;
-        
+                
         switch (message.getType()) {
+        
+        case "LOGIN_RESPONSE":
+            String status = (String) message.getPayload().get("status");
+            String msgText = (String) message.getPayload().get("message");
+            
+            Platform.runLater(() -> {
+                if ("SUCCESS".equals(status)) {
+                    loginStage.hide();
+                    System.out.println(">> Đăng nhập thành công! Đang gửi REGISTER_AGENT...");
+                    
+                    Platform.runLater(() -> {
+                        if (loginStage != null) loginStage.hide();
+                        if (loginController != null) loginController.setStatus("Đang vào hệ thống...", false);
+                        WaitingController.show(msgText);
+                    });
+                    sendRegisterAgent();
+                    
+                    startProcessMonitor();
+                    
+                } else {
+                    // Hiện lỗi lên UI
+                    if (loginController != null) {
+                        loginController.setStatus(msgText, true);
+                    }
+                }
+            });
+            	break;
         
             case "SERVER_CMD_LOCK":
                 Platform.runLater(() -> ScreenLocker.show());
@@ -171,6 +233,7 @@ public class ClientMain extends Application {
                 	System.out.println("Đã nhận được bài thi: " + quiz.getSubject());
                 	
                 	 Platform.runLater(() -> {
+                		 WaitingController.close();
                          QuizView.show(quiz);
                      });
                 }
@@ -178,20 +241,29 @@ public class ClientMain extends Application {
         }
     }
     
-    /**
+    private void sendRegisterAgent() {
+        String machineName = System.getenv("COMPUTERNAME");
+        if (machineName == null) machineName = "MAY_TEST_UNKNOWN";
+        
+        Map<String, Object> payload = Map.of("machineName", machineName);
+        JsonMessage registerMsg = new JsonMessage("REGISTER_AGENT", payload);
+        writer.println(gson.toJson(registerMsg));
+    }
+
+	/**
      * Hàm static để QuizController có thể gọi khi nộp bài.
      * Hàm này chịu trách nhiệm đóng gói dữ liệu và gửi qua Socket.
      */
-    public static void sendSubmit(int quizId, List<Integer> answers) {
+    public static void sendSubmit(int quizId, List<Integer> answers, String submittedAt) {
         if (writer != null) {
             Map<String, Object> payload = Map.of(
                 "quizId", quizId,
-                "answers", answers
+                "answers", answers,
+                "submittedAt", submittedAt
             );
             
             JsonMessage msg = new JsonMessage("SUBMIT_QUIZ", payload);
             
-            // 3. Gửi đi
             String jsonMsg = gson.toJson(msg);
             writer.println(jsonMsg);
             
